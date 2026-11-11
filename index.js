@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors'
 import 'dotenv/config'
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -47,7 +47,31 @@ app.get('/users', async (req, res) => {
 
 // jobs related apis
 app.get('/jobs', async (req, res) => {
-    const cursor = jobs.find();
+
+  const query = {};
+    // console.log('query', req.query);
+    if (req.query) {
+        if (req.query.jobType) {
+            query.jobType = req.query.jobType;
+        }
+    }
+     if (req.query.isRemote) {
+            query.isRemote = req.query.isRemote === 'true';
+        }
+        if (req.query.category) {
+            query.category = req.query.category;
+        }
+        if (req.query.search) {
+            query.$or = [
+                { title: { $regex: req.query.search, $options: 'i' } },
+                { company: { $regex: req.query.search, $options: 'i' } },
+                { responsibilities: { $regex: req.query.search, $options: 'i' } },
+                { requirements: { $regex: req.query.search, $options: 'i' } }
+            ];
+        }
+    
+
+    const cursor = jobs.find(query);
     const result = await cursor.toArray();
     res.send(result);
 })
@@ -56,6 +80,16 @@ app.post('/jobs', async (req, res) => {
     const job = req.body;
     const result = await jobs.insertOne(job);
     res.send(result);
+})
+
+app.delete('/jobs/:id', async (req, res) => {
+    try {
+        const result = await jobs.deleteOne({ _id: new ObjectId(req.params.id) });
+        res.send(result);
+    } catch (err) {
+        // BSONError when the id is not a valid ObjectId
+        res.status(400).send({ error: 'Invalid job id', deletedCount: 0 });
+    }
 })
 
 
