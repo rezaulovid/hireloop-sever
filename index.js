@@ -218,6 +218,40 @@ app.get('/users/:id/premium', async (req, res) => {
   }
 });
 
+// Update user's role
+app.patch('/users/:id/role', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { role } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid user ID" });
+    }
+
+    if (!isNonEmptyString(role)) {
+      return res.status(400).send({ error: "Valid role is required" });
+    }
+
+    const query = { _id: new ObjectId(id) };
+
+    const updateDoc = {
+      $set: {
+        role: role.trim(),
+      },
+    };
+
+    const result = await users.updateOne(query, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({ error: "Failed to update user role" });
+  }
+});
+
 
 // jobs related apis
 
@@ -235,6 +269,11 @@ app.get('/jobs', async (req, res) => {
 
     if (req.query.category) {
       query.category = req.query.category;
+    }
+
+    // Filter jobs by recruiter ID
+    if (req.query.recruiterId) {
+      query.recruiterId = req.query.recruiterId;
     }
 
     if (req.query.search) {
@@ -305,6 +344,11 @@ app.get('/applications', async (req, res) => {
     query.userId = req.query.userId;
   }
 
+  // Support applicantId as an alternative filter
+  if (req.query.applicantId) {
+    query.userId = req.query.applicantId;
+  }
+
   if (req.query.jobId) {
     query.jobId = req.query.jobId;
   }
@@ -358,6 +402,49 @@ app.post('/applications', async (req, res) => {
   const result = await applications.insertOne(application);
 
   res.status(201).send(result);
+});
+
+
+// Update application status
+app.patch('/applications/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { status } = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        error: "Invalid application ID",
+      });
+    }
+
+    if (!isNonEmptyString(status)) {
+      return res.status(400).send({
+        error: "Valid application status is required",
+      });
+    }
+
+    const query = { _id: new ObjectId(id) };
+
+    const updatedDoc = {
+      $set: {
+        status: status.trim(),
+      },
+    };
+
+    const result = await applications.updateOne(query, updatedDoc);
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        error: "Application not found",
+      });
+    }
+
+    res.send(result);
+  } catch (err) {
+    res.status(500).send({
+      error: "Failed to update application status",
+    });
+  }
 });
 
 
@@ -503,255 +590,3 @@ app.post('/payments/checkout-verify', async (req, res) => {
 app.listen(port, () => {
   console.log(`Hire loop is running on port ${port}`);
 });
-
-
-// import express from 'express';
-// import cors from 'cors'
-// import 'dotenv/config'
-// import { MongoClient, ObjectId } from 'mongodb';
-
-// const app = express();
-// const port = process.env.PORT || 5000;
-
-// //middleware
-// app.use(express.json());
-// app.use(cors());
-
-// const client = new MongoClient(`mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.ciwub8g.mongodb.net/`);
-
-
-
-// export async function connectToMongoDB() {
-//   try {
-//     await client.connect();
-//     console.log("You successfully connected to MongoDB!");
-//     return client;
-//   } catch (err) {
-//     console.dir(err);
-//   }
-// }
-
-// const connectedClient =await connectToMongoDB();
-// const database = connectedClient.db("hireloopdb");
-// const users = database.collection("user");
-// const jobs = database.collection("jobs");
-// const applications = database.collection("applications");
-
-// /**
-//  * A job application stored in the `applications` collection.
-//  *
-//  * It is a snapshot of the job at apply time plus the applicant identity and
-//  * lifecycle state, so the seeker dashboard can render a row without joins.
-//  *
-//  * @typedef {Object} JobApplication
-//  * @property {string} jobId            - `_id` of the applied job.
-//  * @property {string} userId           - `_id` of the seeker who applied.
-//  * @property {string} email            - Applicant email at apply time.
-//  * @property {string} jobTitle         - Job title snapshot.
-//  * @property {string} companyName      - Company name snapshot.
-//  * @property {string} category         - Job category, e.g. "Design".
-//  * @property {string} jobType          - "full-time" | "part-time" | "contract" | "internship".
-//  * @property {boolean} isRemote        - Whether the role is remote.
-//  * @property {string} location         - Job location snapshot.
-//  * @property {string} deadline         - Application deadline (ISO date), or "".
-//  * @property {string} appliedAt        - ISO timestamp of the application.
-//  * @property {string} status           - Application lifecycle status.
-//  * @property {boolean} archived        - Hidden from the active applications tab.
-//  */
-
-// const JOB_TYPES = ["full-time", "part-time", "contract", "internship"];
-// const APPLICATION_STATUSES = [
-//   "applied",
-//   "reviewed",
-//   "shortlisted",
-//   "interview",
-//   "offered",
-//   "rejected",
-//   "hired",
-// ];
-
-// const isNonEmptyString = (value) => typeof value === "string" && value.trim().length > 0;
-// const isValidDate = (value) => isNonEmptyString(value) && !Number.isNaN(Date.parse(value));
-// const isEmail = (value) => isNonEmptyString(value) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
-
-// /**
-//  * Validate the application payload and keep only the fields the
-//  * `applications` collection owns. Returns `{ data }` or `{ error }`.
-//  *
-//  * @param {unknown} input
-//  * @returns {{ data: JobApplication } | { error: string }}
-//  */
-// function normalizeApplication(input) {
-//   if (typeof input !== "object" || input === null) {
-//     return { error: "Application payload must be an object" };
-//   }
-
-//   const payload = input;
-
-//   if (!isNonEmptyString(payload.jobId)) return { error: "jobId is required" };
-//   if (!isNonEmptyString(payload.userId)) return { error: "userId is required" };
-//   if (!isEmail(payload.email)) return { error: "A valid email is required" };
-//   if (!isNonEmptyString(payload.jobTitle)) return { error: "jobTitle is required" };
-//   if (!isNonEmptyString(payload.companyName)) return { error: "companyName is required" };
-//   if (!isNonEmptyString(payload.category)) return { error: "category is required" };
-//   if (!isNonEmptyString(payload.location)) return { error: "location is required" };
-//   if (!JOB_TYPES.includes(payload.jobType)) {
-//     return { error: `jobType must be one of: ${JOB_TYPES.join(", ")}` };
-//   }
-//   if (typeof payload.isRemote !== "boolean") return { error: "isRemote must be a boolean" };
-//   if (payload.deadline !== "" && payload.deadline !== undefined && !isValidDate(payload.deadline)) {
-//     return { error: "deadline must be a valid date" };
-//   }
-//   if (!isValidDate(payload.appliedAt)) return { error: "appliedAt must be a valid ISO date" };
-//   if (!APPLICATION_STATUSES.includes(payload.status)) {
-//     return { error: `status must be one of: ${APPLICATION_STATUSES.join(", ")}` };
-//   }
-//   if (typeof payload.archived !== "boolean") return { error: "archived must be a boolean" };
-
-//   return {
-//     data: {
-//       jobId: payload.jobId.trim(),
-//       userId: payload.userId.trim(),
-//       email: payload.email.trim(),
-//       jobTitle: payload.jobTitle.trim(),
-//       companyName: payload.companyName.trim(),
-//       category: payload.category.trim(),
-//       jobType: payload.jobType,
-//       isRemote: payload.isRemote,
-//       location: payload.location.trim(),
-//       deadline: typeof payload.deadline === "string" ? payload.deadline : "",
-//       appliedAt: payload.appliedAt,
-//       status: payload.status,
-//       archived: payload.archived,
-//     },
-//   };
-// }
-
-
-// // const connectedClient = await connectToMongoDB();
-// // const database = connectedClient.db("hireloopdb");
-// // const users = database.collection("user");
-// // const jobs = database.collection("jobs");
-
-
-// app.get('/', (req, res) => {
-//   res.send('Hire loop is looping!');
-// });
-
-// app.get('/users', async (req, res) => {
-//     const cursor = users.find({});
-//     const result = await cursor.toArray();
-//     res.send(result);
-// })
-
-
-
-// // jobs related apis
-// app.get('/jobs', async (req, res) => {
-
-//   const query = {};
-//     // console.log('query', req.query);
-//     if (req.query) {
-//         if (req.query.jobType) {
-//             query.jobType = req.query.jobType;
-//         }
-//     }
-//      if (req.query.isRemote) {
-//             query.isRemote = req.query.isRemote === 'true';
-//         }
-//         if (req.query.category) {
-//             query.category = req.query.category;
-//         }
-//         if (req.query.search) {
-//             query.$or = [
-//                 { title: { $regex: req.query.search, $options: 'i' } },
-//                 { company: { $regex: req.query.search, $options: 'i' } },
-//                 { responsibilities: { $regex: req.query.search, $options: 'i' } },
-//                 { requirements: { $regex: req.query.search, $options: 'i' } }
-//             ];
-//         }
-    
-
-//     const cursor = jobs.find(query);
-//     const result = await cursor.toArray();
-//     res.send(result);
-// })
-
-// app.get(`/jobs/:id`, async (req, res) => {
-//     const id = req.params.id;
-//     const query = { _id: new ObjectId(id) };
-//     const result = await jobs.findOne(query);
-//     res.send(result);
-// })
-
-
-// app.post('/jobs', async (req, res) => {
-//     const job = req.body;
-//     const result = await jobs.insertOne(job);
-//     res.send(result);
-// })
-
-// app.delete('/jobs/:id', async (req, res) => {
-//     try {
-//         const result = await jobs.deleteOne({ _id: new ObjectId(req.params.id) });
-//         res.send(result);
-//     } catch (err) {
-//         // BSONError when the id is not a valid ObjectId
-//         res.status(400).send({ error: 'Invalid job id', deletedCount: 0 });
-//     }
-// })
-
-
-// // applications related apis
-// app.get('/applications', async (req, res) => {
-//     const query = {};
-//     if (req.query.userId) {
-//         query.userId = req.query.userId;
-//     }
-//     if (req.query.jobId) {
-//         query.jobId = req.query.jobId;
-//     }
-//     if (req.query.status) {
-//         query.status = req.query.status;
-//     }
-//     if (req.query.archived !== undefined) {
-//         query.archived = req.query.archived === 'true';
-//     }
-//     const cursor = applications.find(query);
-//     const result = await cursor.toArray();
-//     res.send(result);
-// })
-// app.get('/applications/count', async (req, res) => {
-//     const query = {};
-//     if (req.query.applicantId) {
-//         query.userId = req.query.applicantId;
-//     }
-//     const result = await applications.countDocuments(query);
-//     res.send({ count: result });
-// })
-
-
-
-// app.post('/applications', async (req, res) => {
-//     const { data: application, error } = normalizeApplication(req.body);
-//     if (error) {
-//         res.status(400).send({ error });
-//         return;
-//     }
-
-//     // One application per seeker per job — repeats are flagged, not re-inserted
-//     const existing = await applications.findOne({ jobId: application.jobId, userId: application.userId });
-//     if (existing) {
-//         res.send({ insertedId: existing._id, alreadyApplied: true });
-//         return;
-//     }
-
-//     const result = await applications.insertOne(application);
-//     res.status(201).send(result);
-// })
-
-
-
-// app.listen(port, () => {
-//   console.log(`hire loop is runing... ${port}`);
-// });
